@@ -1,86 +1,81 @@
 import type { Platform, Coin, Pickup, Snowflake } from "../types";
 
-export function generateInitialPlatforms(canvasW: number, canvasH: number): Platform[] {
-  const platforms: Platform[] = [];
-  platforms.push({ x: 0, y: canvasH - 40, width: canvasW, type: "normal", crumbleTimer: 0, crumbled: false });
-  let lastY = canvasH - 130;
-  for (let i = 0; i < 22; i++) {
-    platforms.push(...generatePlatformRow(canvasW, lastY, 0));
+export function generateInitialPlatforms(cw: number, ch: number): Platform[] {
+  const out: Platform[] = [];
+  out.push({ x: 0, y: ch - 40, width: cw, type: "normal", crumbleTimer: 0, crumbled: false });
+  let lastY = ch - 140;
+  for (let i = 0; i < 24; i++) {
+    out.push(...generatePlatformRow(cw, lastY, 0));
     lastY -= 110 + Math.random() * 50;
   }
-  return platforms;
+  return out;
 }
 
-export function generatePlatformRow(canvasW: number, y: number, altitude: number): Platform[] {
-  const platforms: Platform[] = [];
-  const difficulty = Math.min(altitude / 4000, 1);
+export function generatePlatformRow(cw: number, y: number, altitude: number): Platform[] {
+  const out: Platform[] = [];
+  const diff = Math.min(altitude / 4000, 1);
   const count = Math.random() < 0.35 ? 2 : 1;
-  const minW = Math.max(70, 160 - difficulty * 70);
-  const maxW = Math.max(90, 220 - difficulty * 80);
+  const minW = Math.max(70, 160 - diff * 70);
+  const maxW = Math.max(90, 220 - diff * 80);
 
   if (count === 1) {
     const w = minW + Math.random() * (maxW - minW);
-    const x = 20 + Math.random() * (canvasW - w - 40);
-    platforms.push(makePlatform(x, y, w, altitude));
+    const x = 20 + Math.random() * (cw - w - 40);
+    out.push(makePlat(x, y, w, altitude));
   } else {
     const w1 = minW + Math.random() * (maxW - minW);
     const w2 = minW + Math.random() * (maxW - minW);
     const gap = 40 + Math.random() * 50;
-    const startX = Math.max(10, (canvasW - w1 - gap - w2) / 2 + (Math.random() - 0.5) * 60);
-    if (startX + w1 + gap + w2 < canvasW - 10) {
-      platforms.push(makePlatform(startX, y, w1, altitude));
-      platforms.push(makePlatform(startX + w1 + gap, y, w2, altitude));
+    const sx = Math.max(10, (cw - w1 - gap - w2) / 2 + (Math.random() - 0.5) * 60);
+    if (sx + w1 + gap + w2 < cw - 10) {
+      out.push(makePlat(sx, y, w1, altitude));
+      out.push(makePlat(sx + w1 + gap, y, w2, altitude));
     } else {
-      platforms.push(makePlatform(20, y, Math.min(w1, canvasW - 40), altitude));
+      out.push(makePlat(20, y, Math.min(w1, cw - 40), altitude));
     }
   }
-  return platforms;
+  return out;
 }
 
-function makePlatform(x: number, y: number, w: number, altitude: number): Platform {
-  const difficulty = Math.min(altitude / 4000, 1);
+function makePlat(x: number, y: number, w: number, altitude: number): Platform {
+  const diff = Math.min(altitude / 4000, 1);
   const r = Math.random();
   let type: Platform["type"] = "normal";
-  if (altitude > 500) {
-    if (r < difficulty * 0.15) type = "crumble";
-    else if (r < difficulty * 0.25) type = "bounce";
-    else if (r < difficulty * 0.35) type = "ice";
+  if (altitude > 400) {
+    if (r < diff * 0.15) type = "crumble";
+    else if (r < diff * 0.28) type = "bounce";
+    else if (r < diff * 0.38) type = "ice";
   }
   return { x, y, width: w, type, crumbleTimer: 0, crumbled: false };
 }
 
-export function generateCoins(platforms: Platform[], existingCoins: Coin[]): Coin[] {
-  const coins: Coin[] = [...existingCoins];
+export function generateCoins(platforms: Platform[]): Coin[] {
+  const coins: Coin[] = [];
   for (const p of platforms) {
-    if (p.type === "crumble" || p.crumbled) continue;
+    if (p.type === "crumble") continue;
     if (Math.random() < 0.45) {
-      const cx = p.x + p.width / 2 + (Math.random() - 0.5) * (p.width * 0.5);
-      coins.push({ x: cx, y: p.y - 22, collected: false, bobOffset: Math.random() * Math.PI * 2 });
+      coins.push({ x: p.x + p.width / 2, y: p.y - 22, collected: false, anim: Math.random() * Math.PI * 2 });
     }
   }
   return coins;
 }
 
-export function generatePickups(platforms: Platform[], existingPickups: Pickup[]): Pickup[] {
-  const pickups: Pickup[] = [...existingPickups];
+export function generatePickups(platforms: Platform[]): Pickup[] {
+  const picks: Pickup[] = [];
   for (const p of platforms) {
-    if (p.crumbled) continue;
-    const r = Math.random();
-    if (r < 0.08) {
-      pickups.push({ x: p.x + p.width / 2, y: p.y - 24, kind: "fizzy", collected: false, bobOffset: Math.random() * Math.PI * 2 });
-    } else if (r < 0.13) {
-      pickups.push({ x: p.x + p.width / 2, y: p.y - 24, kind: "medicine", collected: false, bobOffset: Math.random() * Math.PI * 2 });
+    if (Math.random() < 0.12) {
+      picks.push({ x: p.x + p.width * 0.3, y: p.y - 26, kind: "fizzy", collected: false, anim: Math.random() * Math.PI * 2 });
+    } else if (Math.random() < 0.08) {
+      picks.push({ x: p.x + p.width * 0.7, y: p.y - 26, kind: "medicine", collected: false, anim: Math.random() * Math.PI * 2 });
     }
   }
-  return pickups;
+  return picks;
 }
 
-export function generateSnowflakes(count: number, w: number, h: number): Snowflake[] {
-  return Array.from({ length: count }, () => ({
-    x: Math.random() * w,
-    y: Math.random() * h,
-    speed: 30 + Math.random() * 50,
-    size: 1 + Math.random() * 2.5,
-    opacity: 0.3 + Math.random() * 0.5,
-  }));
+export function generateSnowflakes(count: number, cw: number, ch: number): Snowflake[] {
+  const out: Snowflake[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push({ x: Math.random() * cw, y: Math.random() * ch, speed: 30 + Math.random() * 50, size: 1 + Math.random() * 2 });
+  }
+  return out;
 }

@@ -9,274 +9,152 @@ import {
   generatePickups,
   generateSnowflakes,
 } from "./lib/mountainGen";
-import type { GameState, Platform, Gender, Screen } from "./types";
+import type { GameState, Gender, Screen } from "./types";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 const GRAVITY = 1400;
-const JUMP_FORCE = -600;
-const FIZZY_JUMP_FORCE = -820;
-const PLAYER_SPEED = 260;
-const NORMAL_FRICTION = 0.55; // snappy stop — less slippery
+const JUMP_FORCE = -620;
+const FIZZY_JUMP = -900;
+const SPEED = 270;
+const FRICTION = 0.45;
 const ICE_FRICTION = 0.97;
-const ROCK_SPAWN_BASE = 5;
-const PLATFORM_SPAWN_AHEAD = 700;
-const FIZZY_DURATION = 5;
-const INVINCIBLE_DURATION = 2;
-const PLAYER_W = 20;
-const PLAYER_H = 28;
+const PW = 22;
+const PH = 30;
+const FIZZY_DUR = 5;
+const INVINCIBLE_DUR = 2.5;
+const SPAWN_AHEAD = 700;
 
-const LEVEL_CONFIG = [
-  { label: "Forest",    bg: ["#2d5a27","#1a3a15"], rockMult: 0.6, label2: "Beginner"   },
-  { label: "Mountain",  bg: ["#3a4a6b","#1a2035"], rockMult: 1.0, label2: "Normal"     },
-  { label: "Blizzard",  bg: ["#4a5a7a","#2a3050"], rockMult: 1.5, label2: "Hard"       },
-  { label: "Volcano",   bg: ["#6b2a1a","#3a1008"], rockMult: 2.2, label2: "Extreme"    },
+const LEVELS = [
+  { name: "Forest",   emoji: "🌲", bg1: "#1a3a15", bg2: "#2d5a27", rocks: 0.6, desc: "Beginner" },
+  { name: "Mountain", emoji: "🏔️", bg1: "#1a2035", bg2: "#3a4a6b", rocks: 1.0, desc: "Normal"   },
+  { name: "Blizzard", emoji: "❄️", bg1: "#2a3050", bg2: "#4a5a7a", rocks: 1.5, desc: "Hard"     },
+  { name: "Volcano",  emoji: "🌋", bg1: "#3a1008", bg2: "#6b2a1a", rocks: 2.2, desc: "Extreme"  },
 ];
 
-// ─── Pixel art character drawing ──────────────────────────────────────────────
+// ── Pixel character renderer ──────────────────────────────────────────────────
 function drawPixelChar(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  facingRight: boolean,
+  facing: boolean,
   gender: Gender,
   legPhase: number,
-  onGround: boolean,
   fizzy: boolean,
   invincible: boolean,
 ) {
-  // pixel size
   const P = 3;
   ctx.save();
-  if (invincible && Math.floor(Date.now() / 80) % 2 === 0) {
-    ctx.globalAlpha = 0.35;
-  }
-  if (!facingRight) {
-    ctx.translate(x + PLAYER_W / 2, y + PLAYER_H / 2);
-    ctx.scale(-1, 1);
-    ctx.translate(-(x + PLAYER_W / 2), -(y + PLAYER_H / 2));
+
+  if (invincible && Math.floor(Date.now() / 100) % 2 === 0) {
+    ctx.globalAlpha = 0.3;
   }
 
-  const cx = Math.floor(x + PLAYER_W / 2);
-  const ty = Math.floor(y);
+  const cx = x + PW / 2;
+  const cy = y + PH / 2;
+  ctx.translate(cx, cy);
+  if (!facing) ctx.scale(-1, 1);
+  ctx.translate(-cx, -cy);
 
-  // colours
-  const skinColor   = "#f5c5a0";
-  const hairBoy     = "#3a2010";
-  const hairGirl    = "#c0306a";
-  const shirtBoy    = "#2255cc";
-  const shirtGirl   = "#dd3388";
-  const pantsColor  = gender === "boy" ? "#334477" : "#882255";
-  const shoeColor   = "#222222";
-  const glowColor   = fizzy ? "#ffee44" : "transparent";
+  const ox = Math.floor(x + (PW - 4 * P) / 2);
+  const oy = Math.floor(y);
 
-  // fizzy glow aura
+  const skin  = "#f5c18a";
+  const hair  = gender === "boy" ? "#3a2a10" : "#c0392b";
+  const shirt = gender === "boy" ? "#2980b9" : "#e91e8c";
+  const pants = gender === "boy" ? "#34495e" : "#9b59b6";
+  const shoe  = "#2c1a0a";
+
   if (fizzy) {
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = "#ffe066";
+    ctx.shadowBlur = 14;
   }
 
-  function px(col: number, row: number, color: string, w = 1, h = 1) {
+  function px(col: number, row: number, color: string) {
     ctx.fillStyle = color;
-    ctx.fillRect(cx - Math.floor(PLAYER_W / 2) + col * P, ty + row * P, P * w, P * h);
+    ctx.fillRect(ox + col * P, oy + row * P, P, P);
   }
 
-  // HEAD (3×3 pixels wide)
-  px(1, 0, gender === "boy" ? hairBoy : hairGirl, 4, 1); // hair top
-  if (gender === "girl") {
-    px(0, 0, hairGirl, 1, 2); // side hair left
-    px(4, 0, hairGirl, 1, 2); // side hair right
+  // Hair rows 0-1
+  if (gender === "boy") {
+    [1, 2, 3].forEach(c => px(c, 0, hair));
+    [0, 1, 2, 3].forEach(c => px(c, 1, hair));
+  } else {
+    [0, 1, 2, 3].forEach(c => px(c, 0, hair));
+    [0, 3].forEach(c => px(c, 1, hair));
+    [1, 2].forEach(c => px(c, 1, skin));
   }
-  px(1, 1, skinColor, 4, 2); // face
-  // eyes
-  px(1, 1, "#111", 1, 1);
-  px(3, 1, "#111", 1, 1);
-  // mouth smile
-  px(2, 2, "#cc6644", 1, 1);
 
-  // BODY / SHIRT
-  const shirt = gender === "boy" ? shirtBoy : shirtGirl;
-  px(1, 3, shirt, 4, 3);
+  // Face rows 2-3
+  [1, 2].forEach(c => px(c, 2, skin));
+  [0, 3].forEach(c => px(c, 2, gender === "girl" ? hair : skin));
+  [0, 1, 2, 3].forEach(c => px(c, 3, skin));
 
-  // ARMS
-  px(0, 3, skinColor, 1, 2);
-  px(5, 3, skinColor, 1, 2);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(ox + 1 * P + 1, oy + 2 * P + 1, 2, 2);
+  ctx.fillRect(ox + 2 * P + 1, oy + 2 * P + 1, 2, 2);
 
-  // PANTS
-  px(1, 6, pantsColor, 2, 2);
-  px(3, 6, pantsColor, 2, 2);
+  // Torso rows 4-5
+  [0, 1, 2, 3].forEach(c => px(c, 4, shirt));
+  [0, 1, 2, 3].forEach(c => px(c, 5, shirt));
 
-  // LEGS (animated)
-  const legSwing = onGround ? Math.sin(legPhase * 8) * 1 : 0;
-  const lOff = Math.round(legSwing);
-  const rOff = -lOff;
-  // left leg
-  ctx.fillStyle = pantsColor;
-  ctx.fillRect(cx - Math.floor(PLAYER_W / 2) + 1 * P, ty + (8 + lOff) * P, P, P * 2);
-  // right leg
-  ctx.fillRect(cx - Math.floor(PLAYER_W / 2) + 3 * P, ty + (8 + rOff) * P, P, P * 2);
+  // Waist row 6
+  [0, 1, 2, 3].forEach(c => px(c, 6, pants));
 
-  // SHOES
-  px(0, 9, shoeColor, 2, 1);
-  px(3, 9, shoeColor, 2, 1);
+  // Legs rows 7-8 (animated)
+  const l = Math.sin(legPhase) > 0 ? 1 : 0;
+  const r2 = 1 - l;
+  px(l,     7, pants);
+  px(r2 + 2, 7, pants);
+  px(l,     8, shoe);
+  px(r2 + 2, 8, shoe);
 
   ctx.restore();
 }
 
-// ─── Draw pixelated coin ──────────────────────────────────────────────────────
-function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  const bob = Math.sin(t * 3) * 3;
-  const cy = y + bob;
-  ctx.save();
-  ctx.shadowColor = "#ffcc00";
-  ctx.shadowBlur = 8;
-  // outer ring
-  ctx.fillStyle = "#ffcc00";
-  ctx.fillRect(x - 7, cy - 7, 14, 14);
-  // inner shine
-  ctx.fillStyle = "#ffe566";
-  ctx.fillRect(x - 5, cy - 5, 10, 10);
-  // centre
-  ctx.fillStyle = "#ffaa00";
-  ctx.fillRect(x - 3, cy - 3, 6, 6);
-  // $ symbol pixel
-  ctx.fillStyle = "#cc8800";
-  ctx.fillRect(x - 1, cy - 4, 2, 8);
-  ctx.fillRect(x - 3, cy - 2, 6, 2);
-  ctx.restore();
-}
-
-// ─── Draw fizzy drink (power-up) ─────────────────────────────────────────────
-function drawFizzy(ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  const bob = Math.sin(t * 2.5 + 1) * 3;
-  const cy = y + bob;
-  ctx.save();
-  ctx.shadowColor = "#44ffcc";
-  ctx.shadowBlur = 10;
-  // can body
-  ctx.fillStyle = "#ff3355";
-  ctx.fillRect(x - 6, cy - 9, 12, 16);
-  // can top
-  ctx.fillStyle = "#cccccc";
-  ctx.fillRect(x - 5, cy - 11, 10, 3);
-  // can bottom
-  ctx.fillRect(x - 5, cy + 6, 10, 3);
-  // label stripe
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x - 5, cy - 4, 10, 4);
-  // bubbles
-  ctx.fillStyle = "#44ffcc";
-  ctx.fillRect(x - 2, cy - 7, 2, 2);
-  ctx.fillRect(x + 1, cy - 5, 2, 2);
-  ctx.restore();
-}
-
-// ─── Draw medicine (heart pickup) ────────────────────────────────────────────
-function drawMedicine(ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
-  const bob = Math.sin(t * 2 + 2) * 3;
-  const cy = y + bob;
-  ctx.save();
-  ctx.shadowColor = "#ff4488";
-  ctx.shadowBlur = 10;
-  // cross (plus sign)
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x - 8, cy - 8, 16, 16);
-  ctx.fillStyle = "#ee2244";
-  ctx.fillRect(x - 6, cy - 2, 12, 4);
-  ctx.fillRect(x - 2, cy - 6, 4, 12);
-  ctx.restore();
-}
-
-// ─── Draw rock ────────────────────────────────────────────────────────────────
-function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(rot);
-  ctx.fillStyle = "#888";
-  // pixelated rock: draw as irregular polygon using rects
-  const s = Math.floor(r / 3) * 3;
-  ctx.fillRect(-s, -s * 0.6, s * 2, s * 1.2);
-  ctx.fillStyle = "#aaa";
-  ctx.fillRect(-s * 0.5, -s * 0.8, s, s * 0.4);
-  ctx.fillStyle = "#666";
-  ctx.fillRect(s * 0.2, s * 0.2, s * 0.5, s * 0.4);
-  ctx.restore();
-}
-
-// ─── Draw platform ────────────────────────────────────────────────────────────
-function drawPlatform(ctx: CanvasRenderingContext2D, p: Platform) {
-  if (p.crumbled) return;
-  const colors: Record<Platform["type"], [string, string]> = {
-    normal:  ["#5a8a3a", "#3a6a1a"],
-    ice:     ["#88ccff", "#4499dd"],
-    crumble: ["#aa7744", "#885522"],
-    bounce:  ["#ffaa22", "#cc7700"],
-  };
-  const [top, side] = colors[p.type];
-  // side
-  ctx.fillStyle = side;
-  ctx.fillRect(p.x, p.y + 8, p.width, 10);
-  // top surface (pixelated edge)
-  ctx.fillStyle = top;
-  ctx.fillRect(p.x, p.y, p.width, 10);
-  // pixel highlights
-  ctx.fillStyle = "rgba(255,255,255,0.25)";
-  ctx.fillRect(p.x + 2, p.y + 1, p.width - 4, 3);
-  // crumble warning
-  if (p.type === "crumble" && p.crumbleTimer > 0) {
-    ctx.fillStyle = `rgba(255,80,0,${Math.min(p.crumbleTimer * 0.6, 0.7)})`;
-    ctx.fillRect(p.x, p.y, p.width, 10);
-  }
-}
-
-// ─── make initial game state ──────────────────────────────────────────────────
-function makeState(cw: number, ch: number, level: number): GameState {
+// ── Game state factory ────────────────────────────────────────────────────────
+function makeGameState(cw: number, ch: number, levelIdx: number): GameState {
   const platforms = generateInitialPlatforms(cw, ch);
-  const coins = generateCoins(platforms, []);
-  const pickups = generatePickups(platforms, []);
-  const rockMult = LEVEL_CONFIG[level]?.rockMult ?? 1;
+  const coins     = generateCoins(platforms);
+  const pickups   = generatePickups(platforms);
+  const snowflakes = generateSnowflakes(55, cw, ch);
+  const lvl = LEVELS[levelIdx] ?? LEVELS[0]!;
   return {
-    px: cw / 2 - PLAYER_W / 2,
+    px: cw / 2 - PW / 2,
     py: ch - 80,
-    pvx: 0,
-    pvy: 0,
+    pvx: 0, pvy: 0,
     onGround: false,
-    facingRight: true,
+    facing: true,
     jumpCount: 0,
     lives: 3,
     invincibleTimer: 0,
     fizzyTimer: 0,
     cameraY: 0,
-    platforms,
-    rocks: [],
-    coins,
-    pickups,
-    particles: [],
-    snowflakes: generateSnowflakes(50, cw, ch),
+    platforms, rocks: [],
+    coins, pickups,
+    particles: [], snowflakes,
     score: 0,
-    coins_collected: 0,
+    coinsCollected: 0,
+    altitude: 0,
     maxAltitude: 0,
     rockSpawnTimer: 0,
-    rockSpawnInterval: ROCK_SPAWN_BASE / rockMult,
-    altitude: 0,
-    playerLegPhase: 0,
+    rockSpawnInterval: 5 / lvl.rocks,
+    legPhase: 0,
     deathTimer: 0,
-    touchLeft: false,
-    touchRight: false,
-    touchJump: false,
+    prevJump: false,
+    touchLeft: false, touchRight: false, touchJump: false,
   };
 }
 
-function spawnParticles(
-  state: GameState, x: number, y: number, color: string, count: number, speed = 120,
-) {
+function spawnParticles(s: GameState, x: number, y: number, color: string, count: number) {
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const s = speed * (0.4 + Math.random() * 0.6);
-    state.particles.push({
+    const spd = 80 + Math.random() * 140;
+    s.particles.push({
       x, y,
-      vx: Math.cos(angle) * s,
-      vy: Math.sin(angle) * s - 60,
-      life: 0.6 + Math.random() * 0.4,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd - 60,
+      life: 0.5 + Math.random() * 0.5,
       maxLife: 1,
       color,
       size: 3 + Math.random() * 4,
@@ -284,755 +162,739 @@ function spawnParticles(
   }
 }
 
-// ─── HOME SCREEN ─────────────────────────────────────────────────────────────
-function HomeScreen({ onPlay, onCharacter, onLevels }: {
-  onPlay: () => void;
-  onCharacter: () => void;
-  onLevels: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-0"
-      style={{ background: "linear-gradient(180deg, #1a2a4a 0%, #2d5a27 100%)" }}>
-      {/* Mountain illustration */}
-      <div className="relative w-full flex justify-center mb-2" style={{ height: 120 }}>
-        <svg viewBox="0 0 320 120" width="320" height="120" style={{ position: "absolute" }}>
-          <polygon points="160,10 60,110 260,110" fill="#4a6a8a" />
-          <polygon points="160,10 100,70 220,70" fill="#6a8aaa" />
-          <polygon points="160,10 140,40 180,40" fill="#ffffff" opacity="0.8" />
-          {/* snow cap */}
-          <polygon points="160,10 145,35 175,35" fill="#eef" />
-          {/* flag */}
-          <rect x="159" y="10" width="2" height="18" fill="#cc2222" />
-          <polygon points="161,10 161,20 172,15" fill="#ff4444" />
-          {/* pixel climber on mountain */}
-          <rect x="148" y="52" width="6" height="8" fill="#f5c5a0" />
-          <rect x="147" y="60" width="8" height="6" fill="#2255cc" />
-          <rect x="147" y="66" width="3" height="4" fill="#334477" />
-          <rect x="152" y="66" width="3" height="4" fill="#334477" />
-        </svg>
-      </div>
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderFrame(
+  ctx: CanvasRenderingContext2D,
+  cw: number,
+  ch: number,
+  s: GameState,
+  gender: Gender,
+  levelIdx: number,
+) {
+  const lv = LEVELS[levelIdx] ?? LEVELS[0]!;
+  const cam = s.cameraY;
 
-      {/* Title */}
-      <h1 style={{ fontFamily: "Fraunces, serif", color: "#fff", fontSize: 32, fontWeight: 900,
-        textShadow: "0 3px 12px #000a", letterSpacing: 1, marginBottom: 4 }}>
-        ⛰️ Climber Adventure
-      </h1>
-      <p style={{ color: "#aaddff", fontSize: 13, marginBottom: 24, fontFamily: "Manrope, sans-serif" }}>
-        Reach the summit!
-      </p>
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, 0, ch);
+  grad.addColorStop(0, lv.bg1);
+  grad.addColorStop(1, lv.bg2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, cw, ch);
 
-      {/* Buttons */}
-      <button onClick={onPlay}
-        style={{ background: "#22cc55", color: "#fff", border: "none", borderRadius: 12,
-          padding: "14px 48px", fontSize: 20, fontWeight: 800, cursor: "pointer",
-          fontFamily: "Manrope, sans-serif", boxShadow: "0 4px 0 #118833", marginBottom: 12,
-          minWidth: 200, minHeight: 52 }}>
-        ▶ PLAY
-      </button>
+  // Stars
+  ctx.fillStyle = "#ffffff55";
+  for (let i = 0; i < 40; i++) {
+    const sx = (i * 137 + 50) % cw;
+    const sy = (((i * 97 + 30) % (ch * 2)) - (cam * 0.05 % ch) + ch * 2) % ch;
+    ctx.fillRect(sx, sy, i % 3 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1);
+  }
 
-      <button onClick={onCharacter}
-        style={{ background: "#cc44aa", color: "#fff", border: "none", borderRadius: 12,
-          padding: "12px 36px", fontSize: 16, fontWeight: 700, cursor: "pointer",
-          fontFamily: "Manrope, sans-serif", boxShadow: "0 4px 0 #882277", marginBottom: 10,
-          minWidth: 200, minHeight: 48 }}>
-        👤 Choose Character
-      </button>
+  ctx.save();
+  ctx.translate(0, -cam);
 
-      <button onClick={onLevels}
-        style={{ background: "#4488ff", color: "#fff", border: "none", borderRadius: 12,
-          padding: "12px 36px", fontSize: 16, fontWeight: 700, cursor: "pointer",
-          fontFamily: "Manrope, sans-serif", boxShadow: "0 4px 0 #2255cc", marginBottom: 10,
-          minWidth: 200, minHeight: 48 }}>
-        🗺️ Select Level
-      </button>
+  // Platforms
+  for (const p of s.platforms) {
+    if (p.crumbled) continue;
+    if (p.y < cam - 20 || p.y > cam + ch + 20) continue;
 
-      <p style={{ color: "#88aacc", fontSize: 11, marginTop: 8, fontFamily: "Manrope, sans-serif" }}>
-        Arrow keys / WASD to move · Space or ↑ to jump
-      </p>
-    </div>
-  );
+    let color = "#5a8a3a";
+    let topColor = "#7ab84a";
+    if (p.type === "ice")    { color = "#5a9aaa"; topColor = "#8adaee"; }
+    if (p.type === "crumble"){ color = "#8a6a3a"; topColor = "#aa8a5a"; }
+    if (p.type === "bounce") { color = "#aa5a2a"; topColor = "#ee8a4a"; }
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(p.x, p.y, p.width, 14, 4);
+    ctx.fill();
+
+    ctx.fillStyle = topColor;
+    ctx.fillRect(p.x + 4, p.y, p.width - 8, 4);
+
+    if (p.type !== "normal") {
+      ctx.fillStyle = "#fff8";
+      ctx.font = "bold 9px Manrope, sans-serif";
+      ctx.textAlign = "center";
+      const lbl = p.type === "ice" ? "ICE" : p.type === "crumble" ? "!" : "↑";
+      ctx.fillText(lbl, p.x + p.width / 2, p.y + 9);
+    }
+
+    if (p.type === "crumble" && p.crumbleTimer > 0.2) {
+      ctx.strokeStyle = "#fff6";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.width * 0.3, p.y);
+      ctx.lineTo(p.x + p.width * 0.4, p.y + 14);
+      ctx.moveTo(p.x + p.width * 0.6, p.y);
+      ctx.lineTo(p.x + p.width * 0.5, p.y + 14);
+      ctx.stroke();
+    }
+  }
+
+  // Coins
+  for (const coin of s.coins) {
+    if (coin.collected) continue;
+    if (coin.y < cam - 20 || coin.y > cam + ch + 20) continue;
+    const bob = Math.sin(coin.anim) * 3;
+    ctx.save();
+    ctx.shadowColor = "#ffd700";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#ffd700";
+    ctx.beginPath();
+    ctx.arc(coin.x, coin.y + bob, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffec6e";
+    ctx.beginPath();
+    ctx.arc(coin.x - 2, coin.y + bob - 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Pickups
+  for (const pick of s.pickups) {
+    if (pick.collected) continue;
+    if (pick.y < cam - 20 || pick.y > cam + ch + 20) continue;
+    const bob = Math.sin(pick.anim) * 4;
+    ctx.save();
+    if (pick.kind === "fizzy") {
+      ctx.shadowColor = "#ffe066";
+      ctx.shadowBlur = 12;
+      // Can body
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(pick.x - 6, pick.y + bob - 10, 12, 18);
+      ctx.fillStyle = "#c0392b";
+      ctx.fillRect(pick.x - 6, pick.y + bob - 10, 12, 4);
+      // Bubbles
+      ctx.fillStyle = "#fff8";
+      ctx.beginPath();
+      ctx.arc(pick.x - 2, pick.y + bob - 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(pick.x + 2, pick.y + bob, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Label
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 7px Manrope";
+      ctx.textAlign = "center";
+      ctx.fillText("🥤", pick.x, pick.y + bob + 4);
+    } else {
+      // Medicine cross
+      ctx.shadowColor = "#44ff88";
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(pick.x - 9, pick.y + bob - 9, 18, 18);
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(pick.x - 3, pick.y + bob - 9, 6, 18);
+      ctx.fillRect(pick.x - 9, pick.y + bob - 3, 18, 6);
+    }
+    ctx.restore();
+  }
+
+  // Rocks
+  for (const rock of s.rocks) {
+    if (rock.y < cam - 20 || rock.y > cam + ch + 20) continue;
+    ctx.save();
+    ctx.translate(rock.x, rock.y);
+    ctx.rotate(rock.rotation);
+    ctx.fillStyle = "#7a6a5a";
+    ctx.beginPath();
+    ctx.arc(0, 0, rock.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#9a8a7a";
+    ctx.beginPath();
+    ctx.arc(-rock.radius * 0.25, -rock.radius * 0.25, rock.radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Player
+  drawPixelChar(ctx, s.px, s.py, s.facing, gender, s.legPhase, s.fizzyTimer > 0, s.invincibleTimer > 0);
+
+  // Particles
+  for (const p of s.particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore(); // un-translate camera
+
+  // Snowflakes (screen-space)
+  ctx.fillStyle = "#ffffffcc";
+  for (const sf of s.snowflakes) {
+    ctx.beginPath();
+    ctx.arc(sf.x, sf.y, sf.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Altitude HUD
+  ctx.fillStyle = "#ffffffaa";
+  ctx.font = "bold 14px Manrope, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(`🏔️ ${Math.floor(s.altitude / 10)}m`, cw - 12, 28);
 }
 
-// ─── CHARACTER SELECT SCREEN ──────────────────────────────────────────────────
-function CharacterScreen({ gender, onSelect, onBack }: {
-  gender: Gender;
-  onSelect: (g: Gender) => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-4"
-      style={{ background: "linear-gradient(180deg, #1a2a4a 0%, #2d1a4a 100%)" }}>
-      <h2 style={{ fontFamily: "Fraunces, serif", color: "#fff", fontSize: 26, fontWeight: 800,
-        textShadow: "0 2px 8px #000a", marginBottom: 8 }}>
-        Choose Your Character
-      </h2>
+// ── Touch button style ────────────────────────────────────────────────────────
+const touchBtnStyle: React.CSSProperties = {
+  background: "#ffffff22",
+  border: "2px solid #ffffff44",
+  borderRadius: 14,
+  color: "#fff",
+  fontSize: "1.6rem",
+  width: 64,
+  height: 64,
+  cursor: "pointer",
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  touchAction: "none",
+};
 
-      <div style={{ display: "flex", gap: 32, marginBottom: 16 }}>
-        {/* BOY */}
-        <button onClick={() => onSelect("boy")}
-          style={{ background: gender === "boy" ? "#2255cc" : "#1a2a4a",
-            border: gender === "boy" ? "4px solid #88aaff" : "4px solid #334466",
-            borderRadius: 16, padding: "20px 28px", cursor: "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-            minWidth: 110, minHeight: 160, transition: "all 0.15s" }}>
-          {/* Pixel boy preview */}
-          <canvas width={48} height={60} ref={el => {
-            if (!el) return;
-            const ctx = el.getContext("2d");
-            if (!ctx) return;
-            ctx.clearRect(0, 0, 48, 60);
-            const P = 4;
-            const draw = (col: number, row: number, color: string, w = 1, h = 1) => {
-              ctx.fillStyle = color;
-              ctx.fillRect(col * P, row * P, P * w, P * h);
-            };
-            draw(1, 0, "#3a2010", 4, 1);
-            draw(1, 1, "#f5c5a0", 4, 2);
-            draw(1, 1, "#111", 1, 1); draw(3, 1, "#111", 1, 1);
-            draw(2, 2, "#cc6644", 1, 1);
-            draw(1, 3, "#2255cc", 4, 3);
-            draw(0, 3, "#f5c5a0", 1, 2); draw(5, 3, "#f5c5a0", 1, 2);
-            draw(1, 6, "#334477", 2, 2); draw(3, 6, "#334477", 2, 2);
-            draw(1, 8, "#222", 2, 1); draw(3, 8, "#222", 2, 1);
-          }} style={{ imageRendering: "pixelated" }} />
-          <span style={{ color: "#fff", fontFamily: "Manrope, sans-serif", fontWeight: 700, fontSize: 15 }}>
-            BOY
-          </span>
-          {gender === "boy" && <span style={{ color: "#88ffaa", fontSize: 18 }}>✓</span>}
-        </button>
-
-        {/* GIRL */}
-        <button onClick={() => onSelect("girl")}
-          style={{ background: gender === "girl" ? "#aa2277" : "#1a2a4a",
-            border: gender === "girl" ? "4px solid #ffaadd" : "4px solid #334466",
-            borderRadius: 16, padding: "20px 28px", cursor: "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-            minWidth: 110, minHeight: 160, transition: "all 0.15s" }}>
-          {/* Pixel girl preview */}
-          <canvas width={48} height={60} ref={el => {
-            if (!el) return;
-            const ctx = el.getContext("2d");
-            if (!ctx) return;
-            ctx.clearRect(0, 0, 48, 60);
-            const P = 4;
-            const draw = (col: number, row: number, color: string, w = 1, h = 1) => {
-              ctx.fillStyle = color;
-              ctx.fillRect(col * P, row * P, P * w, P * h);
-            };
-            draw(1, 0, "#c0306a", 4, 1);
-            draw(0, 0, "#c0306a", 1, 2); draw(5, 0, "#c0306a", 1, 2);
-            draw(1, 1, "#f5c5a0", 4, 2);
-            draw(1, 1, "#111", 1, 1); draw(3, 1, "#111", 1, 1);
-            draw(2, 2, "#cc6644", 1, 1);
-            draw(1, 3, "#dd3388", 4, 3);
-            draw(0, 3, "#f5c5a0", 1, 2); draw(5, 3, "#f5c5a0", 1, 2);
-            draw(1, 6, "#882255", 2, 2); draw(3, 6, "#882255", 2, 2);
-            draw(1, 8, "#222", 2, 1); draw(3, 8, "#222", 2, 1);
-          }} style={{ imageRendering: "pixelated" }} />
-          <span style={{ color: "#fff", fontFamily: "Manrope, sans-serif", fontWeight: 700, fontSize: 15 }}>
-            GIRL
-          </span>
-          {gender === "girl" && <span style={{ color: "#ffaadd", fontSize: 18 }}>✓</span>}
-        </button>
-      </div>
-
-      <p style={{ color: "#aabbcc", fontFamily: "Manrope, sans-serif", fontSize: 13 }}>
-        Selected: <strong style={{ color: "#fff" }}>{gender === "boy" ? "🧑 Boy" : "👧 Girl"}</strong>
-      </p>
-
-      <button onClick={onBack}
-        style={{ background: "#334466", color: "#aac", border: "none", borderRadius: 10,
-          padding: "10px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer",
-          fontFamily: "Manrope, sans-serif", marginTop: 8, minHeight: 44 }}>
-        ← Back
-      </button>
-    </div>
-  );
-}
-
-// ─── LEVEL SELECT SCREEN ──────────────────────────────────────────────────────
-function LevelScreen({ level, onSelect, onBack }: {
-  level: number;
-  onSelect: (l: number) => void;
-  onBack: () => void;
-}) {
-  const emojis = ["🌲", "⛰️", "❄️", "🌋"];
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-4"
-      style={{ background: "linear-gradient(180deg, #1a2a4a 0%, #2a1a0a 100%)" }}>
-      <h2 style={{ fontFamily: "Fraunces, serif", color: "#fff", fontSize: 26, fontWeight: 800,
-        textShadow: "0 2px 8px #000a", marginBottom: 4 }}>
-        Select Level
-      </h2>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 8 }}>
-        {LEVEL_CONFIG.map((cfg, i) => (
-          <button key={i} onClick={() => onSelect(i)}
-            style={{ background: level === i ? "#2255cc" : "#1a2a3a",
-              border: level === i ? "3px solid #88aaff" : "3px solid #334455",
-              borderRadius: 14, padding: "14px 18px", cursor: "pointer",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              minWidth: 120, minHeight: 90 }}>
-            <span style={{ fontSize: 28 }}>{emojis[i]}</span>
-            <span style={{ color: "#fff", fontFamily: "Manrope, sans-serif", fontWeight: 800, fontSize: 15 }}>
-              {cfg.label}
-            </span>
-            <span style={{ color: "#aac", fontFamily: "Manrope, sans-serif", fontSize: 11 }}>
-              {cfg.label2}
-            </span>
-            {level === i && <span style={{ color: "#88ffaa", fontSize: 14 }}>✓ Selected</span>}
-          </button>
-        ))}
-      </div>
-      <button onClick={onBack}
-        style={{ background: "#334466", color: "#aac", border: "none", borderRadius: 10,
-          padding: "10px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer",
-          fontFamily: "Manrope, sans-serif", minHeight: 44 }}>
-        ← Back
-      </button>
-    </div>
-  );
-}
-
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("home");
-  const [gender, setGender] = useState<Gender>("boy");
-  const [level, setLevel] = useState(0);
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [coins, setCoins] = useState(0);
-  const [fizzyActive, setFizzyActive] = useState(false);
+  const [screen, setScreen]       = useState<Screen>("home");
+  const [gender, setGender]       = useState<Gender>("boy");
+  const [levelIdx, setLevelIdx]   = useState(0);
+  const [score, setScore]         = useState(0);
+  const [coinsUI, setCoinsUI]     = useState(0);
+  const [livesUI, setLivesUI]     = useState(3);
+  const [fizzyUI, setFizzyUI]     = useState(false);
   const [highScore, updateHighScore] = useHighScore("climberadventure_hs");
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<GameState | null>(null);
-  const keysRef = useRef<Set<string>>(new Set());
-  const jumpPressedRef = useRef(false);
-  const timeRef = useRef(0);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const stateRef   = useRef<GameState | null>(null);
+  const genderRef  = useRef<Gender>("boy");
+  const levelRef   = useRef(0);
+  const screenRef  = useRef<Screen>("home");
 
-  // ─── Key listeners ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (screen !== "playing") return;
-    const onDown = (e: KeyboardEvent) => {
-      keysRef.current.add(e.key);
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
-        e.preventDefault();
-      }
-      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") {
-        jumpPressedRef.current = true;
-      }
-    };
-    const onUp = (e: KeyboardEvent) => {
-      keysRef.current.delete(e.key);
-      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") {
-        jumpPressedRef.current = false;
-      }
-    };
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-    return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
-  }, [screen]);
+  useEffect(() => { genderRef.current = gender; }, [gender]);
+  useEffect(() => { levelRef.current = levelIdx; }, [levelIdx]);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
 
-  // ─── Start game ───────────────────────────────────────────────────────────
-  const startGame = useCallback(() => {
+  const initGame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const cw = canvas.width;
-    const ch = canvas.height;
-    stateRef.current = makeState(cw, ch, level);
+    stateRef.current = makeGameState(canvas.width, canvas.height, levelRef.current);
+    setLivesUI(3);
+    setCoinsUI(0);
     setScore(0);
-    setLives(3);
-    setCoins(0);
-    setFizzyActive(false);
-    setScreen("playing");
-  }, [level]);
+    setFizzyUI(false);
+  }, []);
 
-  // ─── Game loop ────────────────────────────────────────────────────────────
-  const tick = useCallback((dt: number) => {
-    const canvas = canvasRef.current;
-    const s = stateRef.current;
-    if (!canvas || !s) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const cw = canvas.width;
-    const ch = canvas.height;
-    timeRef.current += dt;
-    const t = timeRef.current;
-
-    if (screen !== "playing") return;
-
-    // ── Input ──────────────────────────────────────────────────────────────
-    const keys = keysRef.current;
-    const left  = keys.has("ArrowLeft")  || keys.has("a") || keys.has("A") || s.touchLeft;
-    const right = keys.has("ArrowRight") || keys.has("d") || keys.has("D") || s.touchRight;
-    const jumpPressed = jumpPressedRef.current || s.touchJump;
-
-    // ── Physics ────────────────────────────────────────────────────────────
-    const jumpForce = s.fizzyTimer > 0 ? FIZZY_JUMP_FORCE : JUMP_FORCE;
-
-    if (left)  s.pvx -= PLAYER_SPEED * 6 * dt;
-    if (right) s.pvx += PLAYER_SPEED * 6 * dt;
-
-    // Clamp horizontal speed
-    s.pvx = Math.max(-PLAYER_SPEED, Math.min(PLAYER_SPEED, s.pvx));
-
-    // Friction — much less slippery on normal, only ice is slippery
-    const onIce = s.platforms.some(p =>
-      p.type === "ice" && !p.crumbled &&
-      s.py + PLAYER_H >= p.y && s.py + PLAYER_H <= p.y + 14 &&
-      s.px + PLAYER_W > p.x && s.px < p.x + p.width
-    );
-    const friction = onIce ? ICE_FRICTION : NORMAL_FRICTION;
-    if (!left && !right) s.pvx *= Math.pow(friction, dt * 60);
-
-    // Jump
-    if (jumpPressed && s.onGround) {
-      s.pvy = jumpForce;
-      s.jumpCount = 1;
-      s.onGround = false;
-      spawnParticles(s, s.px + PLAYER_W / 2, s.py + PLAYER_H, "#aaffaa", 5, 80);
-      jumpPressedRef.current = false;
-      s.touchJump = false;
-    } else if (jumpPressed && s.jumpCount === 1) {
-      s.pvy = jumpForce * 0.85;
-      s.jumpCount = 2;
-      spawnParticles(s, s.px + PLAYER_W / 2, s.py + PLAYER_H, "#aaaaff", 5, 80);
-      jumpPressedRef.current = false;
-      s.touchJump = false;
-    }
-
-    // Gravity
-    s.pvy += GRAVITY * dt;
-
-    // Move
-    s.px += s.pvx * dt;
-    s.py += s.pvy * dt;
-
-    // Wrap horizontally
-    if (s.px + PLAYER_W < 0) s.px = cw;
-    if (s.px > cw) s.px = -PLAYER_W;
-
-    // ── Platform collision ─────────────────────────────────────────────────
-    s.onGround = false;
-    for (const p of s.platforms) {
-      if (p.crumbled) continue;
-      const prevBottom = s.py + PLAYER_H - s.pvy * dt;
-      const curBottom  = s.py + PLAYER_H;
-      if (
-        s.pvx * dt + s.px + PLAYER_W > p.x + 2 &&
-        s.px + 2 < p.x + p.width &&
-        curBottom >= p.y && prevBottom <= p.y + 10 &&
-        s.pvy >= 0
-      ) {
-        s.py = p.y - PLAYER_H;
-        s.pvy = 0;
-        s.onGround = true;
-        s.jumpCount = 0;
-
-        if (p.type === "bounce") {
-          s.pvy = jumpForce * 1.3;
-          s.onGround = false;
-          spawnParticles(s, s.px + PLAYER_W / 2, s.py + PLAYER_H, "#ffcc00", 6, 100);
-        }
-        if (p.type === "crumble") {
-          p.crumbleTimer += dt * 3;
-          if (p.crumbleTimer >= 1) {
-            p.crumbled = true;
-            spawnParticles(s, p.x + p.width / 2, p.y, "#aa7744", 8, 100);
-          }
-        }
-      }
-    }
-
-    // ── Altitude & camera ──────────────────────────────────────────────────
-    const worldY = s.py + s.cameraY;
-    s.altitude = Math.max(0, -worldY + ch);
-    s.maxAltitude = Math.max(s.maxAltitude, s.altitude);
-    s.score = Math.floor(s.maxAltitude / 10) + s.coins_collected * 5;
-
-    // Smooth camera: follow player upward
-    const targetCam = s.py - ch * 0.45;
-    if (targetCam < s.cameraY) {
-      s.cameraY += (targetCam - s.cameraY) * Math.min(1, dt * 5);
-    }
-
-    // ── Spawn platforms ahead ──────────────────────────────────────────────
-    const topVisible = s.cameraY - PLATFORM_SPAWN_AHEAD;
-    const highestPlat = Math.min(...s.platforms.map(p => p.y));
-    if (highestPlat > topVisible) {
-      let y = highestPlat - (110 + Math.random() * 50);
-      while (y > topVisible) {
-        const newPlats = generatePlatformRow(cw, y, s.altitude);
-        s.platforms.push(...newPlats);
-        generateCoins(newPlats, []).forEach(c => s.coins.push(c));
-        generatePickups(newPlats, []).forEach(p => s.pickups.push(p));
-        y -= 110 + Math.random() * 50;
-      }
-    }
-
-    // Cull far-below platforms/coins/pickups
-    s.platforms = s.platforms.filter(p => p.y < s.cameraY + ch + 300);
-    s.coins     = s.coins.filter(c => c.y < s.cameraY + ch + 300);
-    s.pickups   = s.pickups.filter(p => p.y < s.cameraY + ch + 300);
-
-    // ── Coin collection ────────────────────────────────────────────────────
-    for (const c of s.coins) {
-      if (c.collected) continue;
-      if (Math.abs(c.x - (s.px + PLAYER_W / 2)) < 18 && Math.abs(c.y - (s.py + PLAYER_H / 2)) < 18) {
-        c.collected = true;
-        s.coins_collected++;
-        spawnParticles(s, c.x, c.y - s.cameraY, "#ffcc00", 6, 100);
-      }
-    }
-
-    // ── Pickup collection ──────────────────────────────────────────────────
-    for (const p of s.pickups) {
-      if (p.collected) continue;
-      const screenY = p.y - s.cameraY;
-      if (Math.abs(p.x - (s.px + PLAYER_W / 2)) < 20 && Math.abs(screenY - (s.py + PLAYER_H / 2)) < 20) {
-        p.collected = true;
-        if (p.kind === "fizzy") {
-          s.fizzyTimer = FIZZY_DURATION;
-          spawnParticles(s, p.x, screenY, "#44ffcc", 10, 120);
-        } else {
-          if (s.lives < 5) s.lives = Math.min(5, s.lives + 1);
-          spawnParticles(s, p.x, screenY, "#ff4488", 10, 120);
-        }
-      }
-    }
-
-    // ── Timers ─────────────────────────────────────────────────────────────
-    if (s.fizzyTimer > 0) s.fizzyTimer -= dt;
-    if (s.invincibleTimer > 0) s.invincibleTimer -= dt;
-
-    // ── Rocks ─────────────────────────────────────────────────────────────
-    const rockMult = LEVEL_CONFIG[level]?.rockMult ?? 1;
-    s.rockSpawnTimer += dt;
-    if (s.rockSpawnTimer >= s.rockSpawnInterval) {
-      s.rockSpawnTimer = 0;
-      s.rockSpawnInterval = (ROCK_SPAWN_BASE / rockMult) * (0.7 + Math.random() * 0.6);
-      s.rocks.push({
-        x: Math.random() * cw,
-        y: s.cameraY - 30,
-        vx: (Math.random() - 0.5) * 200,
-        vy: 80 + Math.random() * 120,
-        radius: 10 + Math.random() * 10,
-        rotation: 0,
-        rotSpeed: (Math.random() - 0.5) * 6,
-      });
-    }
-
-    for (const r of s.rocks) {
-      r.x  += r.vx * dt;
-      r.y  += r.vy * dt;
-      r.vy += 400 * dt;
-      r.rotation += r.rotSpeed * dt;
-      if (r.x < 0) r.x = cw;
-      if (r.x > cw) r.x = 0;
-
-      // Hit player
-      if (s.invincibleTimer <= 0) {
-        const rx = r.x;
-        const ry = r.y - s.cameraY;
-        const px2 = s.px + PLAYER_W / 2;
-        const py2 = s.py + PLAYER_H / 2;
-        if (Math.hypot(rx - px2, ry - py2) < r.radius + 10) {
-          s.lives--;
-          s.invincibleTimer = INVINCIBLE_DURATION;
-          spawnParticles(s, px2, py2, "#ff4444", 10, 150);
-          r.y = s.cameraY + ch + 100; // remove rock
-        }
-      }
-    }
-    s.rocks = s.rocks.filter(r => r.y - s.cameraY < ch + 100);
-
-    // ── Snowflakes ─────────────────────────────────────────────────────────
-    for (const sf of s.snowflakes) {
-      sf.y += sf.speed * dt;
-      sf.x += Math.sin(t * 0.5 + sf.opacity * 10) * 15 * dt;
-      if (sf.y > ch) { sf.y = 0; sf.x = Math.random() * cw; }
-    }
-
-    // ── Particles ──────────────────────────────────────────────────────────
-    for (const p of s.particles) {
-      p.x  += p.vx * dt;
-      p.y  += p.vy * dt;
-      p.vy += 300 * dt;
-      p.life -= dt;
-    }
-    s.particles = s.particles.filter(p => p.life > 0);
-
-    // ── Leg animation ─────────────────────────────────────────────────────
-    if (s.onGround && Math.abs(s.pvx) > 10) s.playerLegPhase += dt * 6;
-    if (s.pvx !== 0) s.facingRight = s.pvx > 0;
-
-    // ── Fall death ─────────────────────────────────────────────────────────
-    if (s.py - s.cameraY > ch + 60) {
-      s.lives--;
-      s.invincibleTimer = INVINCIBLE_DURATION;
-      s.py = s.cameraY + ch * 0.4;
-      s.pvy = 0;
-      spawnParticles(s, s.px + PLAYER_W / 2, s.py, "#ff8800", 12, 160);
-    }
-
-    // ── React state sync ───────────────────────────────────────────────────
-    setScore(s.score);
-    setLives(s.lives);
-    setCoins(s.coins_collected);
-    setFizzyActive(s.fizzyTimer > 0);
-
-    if (s.lives <= 0) {
-      updateHighScore(s.score);
-      setScreen("dead");
-      return;
-    }
-
-    // ─────────────────────── RENDER ───────────────────────────────────────
-    const cfg = LEVEL_CONFIG[level] ?? LEVEL_CONFIG[0]!;
-    const [bgTop, bgBot] = cfg.bg;
-
-    // Sky gradient
-    const grad = ctx.createLinearGradient(0, 0, 0, ch);
-    grad.addColorStop(0, bgTop);
-    grad.addColorStop(1, bgBot);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, cw, ch);
-
-    // Stars (high altitude)
-    if (s.altitude > 500) {
-      ctx.fillStyle = `rgba(255,255,255,${Math.min((s.altitude - 500) / 1000, 0.7)})`;
-      for (let i = 0; i < 30; i++) {
-        const sx = ((i * 137 + 17) % cw);
-        const sy = ((i * 211 + 31) % ch);
-        ctx.fillRect(sx, sy, 2, 2);
-      }
-    }
-
-    ctx.save();
-    ctx.translate(0, -s.cameraY);
-
-    // Snowflakes (in world space)
-    for (const sf of s.snowflakes) {
-      ctx.globalAlpha = sf.opacity;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(sf.x, sf.y + s.cameraY, sf.size, sf.size);
-    }
-    ctx.globalAlpha = 1;
-
-    // Platforms
-    for (const p of s.platforms) drawPlatform(ctx, p);
-
-    // Coins
-    for (const c of s.coins) {
-      if (!c.collected) drawCoin(ctx, c.x, c.y, t + c.bobOffset);
-    }
-
-    // Pickups
-    for (const p of s.pickups) {
-      if (!p.collected) {
-        if (p.kind === "fizzy") drawFizzy(ctx, p.x, p.y, t + p.bobOffset);
-        else drawMedicine(ctx, p.x, p.y, t + p.bobOffset);
-      }
-    }
-
-    // Rocks
-    for (const r of s.rocks) drawRock(ctx, r.x, r.y, r.radius, r.rotation);
-
-    // Player
-    drawPixelChar(
-      ctx,
-      s.px, s.py,
-      s.facingRight,
-      gender,
-      s.playerLegPhase,
-      s.onGround,
-      s.fizzyTimer > 0,
-      s.invincibleTimer > 0,
-    );
-
-    // Particles
-    for (const p of s.particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.restore();
-
-    // ── HUD ────────────────────────────────────────────────────────────────
-    // Lives hearts
-    for (let i = 0; i < 5; i++) {
-      ctx.font = "18px sans-serif";
-      ctx.fillText(i < s.lives ? "❤️" : "🖤", 10 + i * 24, 28);
-    }
-
-    // Coin count
-    ctx.fillStyle = "#ffcc00";
-    ctx.fillRect(12, 38, 12, 12);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px Manrope, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(`× ${s.coins_collected}`, 28, 49);
-
-    // Fizzy boost bar
-    if (s.fizzyTimer > 0) {
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillRect(cw / 2 - 50, 8, 100, 12);
-      ctx.fillStyle = "#44ffcc";
-      ctx.fillRect(cw / 2 - 50, 8, (s.fizzyTimer / FIZZY_DURATION) * 100, 12);
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 10px Manrope, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("⚡ FIZZY BOOST", cw / 2, 18);
-    }
-
-    // Altitude
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px Manrope, sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText(`⛰ ${Math.floor(s.altitude)}m`, cw - 10, 20);
-    ctx.textAlign = "left";
-
-  }, [screen, level, gender, updateHighScore]);
-
-  useGameLoop(tick, screen !== "playing");
-
-  // ── Canvas resize ──────────────────────────────────────────────────────────
+  // Resize canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const resize = () => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      canvas.width  = parent.clientWidth;
+      canvas.height = parent.clientHeight;
     };
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
 
-  // ── Touch handlers ─────────────────────────────────────────────────────────
-  const handleTouchLeft  = (active: boolean) => { if (stateRef.current) stateRef.current.touchLeft  = active; };
-  const handleTouchRight = (active: boolean) => { if (stateRef.current) stateRef.current.touchRight = active; };
-  const handleTouchJump  = (active: boolean) => {
-    if (stateRef.current) {
-      stateRef.current.touchJump = active;
-      if (active) jumpPressedRef.current = true;
+  // Init when entering playing screen
+  useEffect(() => {
+    if (screen === "playing") initGame();
+  }, [screen, initGame]);
+
+  // Key listener
+  useEffect(() => {
+    const keys = new Set<string>();
+    (window as unknown as { _gameKeys: Set<string> })._gameKeys = keys;
+    const down = (e: KeyboardEvent) => {
+      keys.add(e.key);
+      if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
+    };
+    const up = (e: KeyboardEvent) => keys.delete(e.key);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  // Game loop
+  const tick = useCallback((dt: number) => {
+    const canvas = canvasRef.current;
+    const s = stateRef.current;
+    if (!canvas || !s) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    // Input
+    const keys: Set<string> = (window as unknown as { _gameKeys: Set<string> })._gameKeys ?? new Set();
+    const goLeft  = keys.has("ArrowLeft")  || keys.has("a") || keys.has("A") || s.touchLeft;
+    const goRight = keys.has("ArrowRight") || keys.has("d") || keys.has("D") || s.touchRight;
+    const jumpNow = keys.has("ArrowUp") || keys.has("w") || keys.has("W") || keys.has(" ") || s.touchJump;
+    const jumpJust = jumpNow && !s.prevJump;
+    s.prevJump = jumpNow;
+
+    // Death pause
+    if (s.deathTimer > 0) {
+      s.deathTimer -= dt;
+      if (s.deathTimer <= 0) {
+        if (s.lives <= 0) {
+          updateHighScore(s.score);
+          setScore(s.score);
+          setCoinsUI(s.coinsCollected);
+          setScreen("dead");
+          return;
+        }
+        // Respawn
+        s.py = s.cameraY + ch * 0.65;
+        s.pvx = 0; s.pvy = 0;
+        s.invincibleTimer = INVINCIBLE_DUR;
+      }
+      renderFrame(ctx, cw, ch, s, genderRef.current, levelRef.current);
+      return;
     }
+
+    // Horizontal movement
+    if (goLeft)  s.pvx -= SPEED * 8 * dt;
+    if (goRight) s.pvx += SPEED * 8 * dt;
+    s.pvx = Math.max(-SPEED, Math.min(SPEED, s.pvx));
+    if (!goLeft && !goRight) s.pvx *= Math.pow(FRICTION, dt * 60);
+    if (Math.abs(s.pvx) < 1) s.pvx = 0;
+    if (s.pvx > 0) s.facing = true;
+    if (s.pvx < 0) s.facing = false;
+
+    // Jump
+    const jf = s.fizzyTimer > 0 ? FIZZY_JUMP : JUMP_FORCE;
+    if (jumpJust) {
+      if (s.onGround) {
+        s.pvy = jf;
+        s.jumpCount = 1;
+        spawnParticles(s, s.px + PW / 2, s.py + PH, "#ffffff", 5);
+      } else if (s.jumpCount < 2) {
+        s.pvy = jf * 0.85;
+        s.jumpCount++;
+        spawnParticles(s, s.px + PW / 2, s.py + PH, "#aaddff", 5);
+      }
+    }
+
+    // Gravity & movement
+    s.pvy += GRAVITY * dt;
+    s.py  += s.pvy * dt;
+    s.px  += s.pvx * dt;
+
+    // Wrap horizontal
+    if (s.px + PW < 0) s.px = cw;
+    if (s.px > cw)     s.px = -PW;
+
+    // Timers
+    if (s.invincibleTimer > 0) s.invincibleTimer -= dt;
+    if (s.fizzyTimer > 0) {
+      s.fizzyTimer -= dt;
+      setFizzyUI(s.fizzyTimer > 0);
+    }
+
+    // Platform collision
+    s.onGround = false;
+    for (const p of s.platforms) {
+      if (p.crumbled) continue;
+      const prevBottom = s.py + PH - s.pvy * dt;
+      const atBottom   = s.py + PH;
+      if (
+        s.pvy >= 0 &&
+        s.px + PW > p.x + 4 &&
+        s.px < p.x + p.width - 4 &&
+        atBottom >= p.y &&
+        prevBottom <= p.y + 12
+      ) {
+        s.py = p.y - PH;
+        s.onGround = true;
+        s.jumpCount = 0;
+
+        if (p.type === "bounce") {
+          s.pvy = JUMP_FORCE * 1.4;
+          spawnParticles(s, s.px + PW / 2, s.py + PH, "#ff9900", 6);
+        } else if (p.type === "ice") {
+          s.pvx *= Math.pow(ICE_FRICTION, dt * 60);
+          s.pvy = 0;
+        } else {
+          s.pvy = 0;
+        }
+
+        if (p.type === "crumble") {
+          p.crumbleTimer += dt;
+          if (p.crumbleTimer > 0.7) p.crumbled = true;
+        }
+      }
+    }
+
+    // Leg anim
+    if (s.onGround && (goLeft || goRight)) s.legPhase += dt * 12;
+
+    // Camera: follow player upward
+    const targetCam = s.py - ch * 0.45;
+    if (targetCam < s.cameraY) s.cameraY += (targetCam - s.cameraY) * Math.min(1, dt * 7);
+
+    // Altitude & score
+    const alt = -s.cameraY;
+    if (alt > s.maxAltitude) {
+      s.maxAltitude = alt;
+      s.altitude = alt;
+      s.score = Math.floor(alt / 10) + s.coinsCollected * 5;
+    }
+
+    // Spawn more platforms above
+    const topVisible = s.cameraY - SPAWN_AHEAD;
+    const highestY   = Math.min(...s.platforms.map(p => p.y));
+    if (highestY > topVisible) {
+      let y = highestY - (110 + Math.random() * 50);
+      while (y > topVisible) {
+        const newPlats = generatePlatformRow(cw, y, s.altitude);
+        s.platforms.push(...newPlats);
+        s.coins.push(...generateCoins(newPlats));
+        s.pickups.push(...generatePickups(newPlats));
+        y -= 110 + Math.random() * 50;
+      }
+    }
+
+    // Cull off-screen objects
+    const cullY = s.cameraY + ch + 300;
+    s.platforms = s.platforms.filter(p => p.y < cullY);
+    s.coins     = s.coins.filter(c => c.y < cullY);
+    s.pickups   = s.pickups.filter(p => p.y < cullY);
+
+    // Spawn rocks
+    s.rockSpawnTimer += dt;
+    if (s.rockSpawnTimer >= s.rockSpawnInterval) {
+      s.rockSpawnTimer = 0;
+      const lvl = LEVELS[levelRef.current] ?? LEVELS[0]!;
+      s.rockSpawnInterval = (4 + Math.random() * 3) / lvl.rocks;
+      const rad = 8 + Math.random() * 10;
+      s.rocks.push({
+        x: Math.random() * cw,
+        y: s.cameraY - 30,
+        vx: (Math.random() - 0.5) * 180,
+        vy: 80 + Math.random() * 120,
+        radius: rad,
+        rotation: 0,
+        rotSpeed: (Math.random() - 0.5) * 6,
+      });
+    }
+
+    // Update rocks
+    for (const rock of s.rocks) {
+      rock.x += rock.vx * dt;
+      rock.y += rock.vy * dt;
+      rock.vy += GRAVITY * 0.4 * dt;
+      rock.rotation += rock.rotSpeed * dt;
+      if (rock.x < 0) rock.x = cw;
+      if (rock.x > cw) rock.x = 0;
+
+      // Hit player
+      if (s.invincibleTimer <= 0 && s.deathTimer <= 0) {
+        const dx = rock.x - (s.px + PW / 2);
+        const dy = rock.y - (s.py + PH / 2);
+        if (Math.sqrt(dx * dx + dy * dy) < rock.radius + 11) {
+          s.lives--;
+          s.invincibleTimer = INVINCIBLE_DUR;
+          s.deathTimer = 0.4;
+          spawnParticles(s, s.px + PW / 2, s.py + PH / 2, "#ff4444", 10);
+          setLivesUI(s.lives);
+          rock.y = cullY + 999;
+        }
+      }
+    }
+    s.rocks = s.rocks.filter(r => r.y < cullY);
+
+    // Collect coins
+    for (const coin of s.coins) {
+      coin.anim += dt * 3;
+      if (!coin.collected) {
+        const dx = coin.x - (s.px + PW / 2);
+        const dy = coin.y - (s.py + PH / 2);
+        if (Math.sqrt(dx * dx + dy * dy) < 18) {
+          coin.collected = true;
+          s.coinsCollected++;
+          s.score += 5;
+          spawnParticles(s, coin.x, coin.y, "#ffd700", 6);
+          setCoinsUI(s.coinsCollected);
+        }
+      }
+    }
+
+    // Collect pickups
+    for (const pick of s.pickups) {
+      pick.anim += dt * 2;
+      if (!pick.collected) {
+        const dx = pick.x - (s.px + PW / 2);
+        const dy = pick.y - (s.py + PH / 2);
+        if (Math.sqrt(dx * dx + dy * dy) < 20) {
+          pick.collected = true;
+          if (pick.kind === "fizzy") {
+            s.fizzyTimer = FIZZY_DUR;
+            setFizzyUI(true);
+            spawnParticles(s, pick.x, pick.y, "#ffe066", 8);
+          } else {
+            if (s.lives < 5) { s.lives++; setLivesUI(s.lives); }
+            spawnParticles(s, pick.x, pick.y, "#44ff88", 8);
+          }
+        }
+      }
+    }
+
+    // Update particles
+    for (const p of s.particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 300 * dt;
+      p.life -= dt;
+    }
+    s.particles = s.particles.filter(p => p.life > 0);
+
+    // Snowflakes
+    for (const sf of s.snowflakes) {
+      sf.y += sf.speed * dt;
+      if (sf.y > ch) { sf.y = -5; sf.x = Math.random() * cw; }
+    }
+
+    // Fell off bottom
+    if (s.py > s.cameraY + ch + 100 && s.invincibleTimer <= 0 && s.deathTimer <= 0) {
+      s.lives--;
+      s.deathTimer = 0.5;
+      setLivesUI(s.lives);
+      spawnParticles(s, s.px + PW / 2, s.py, "#ff4444", 12);
+    }
+
+    // Render
+    renderFrame(ctx, cw, ch, s, genderRef.current, levelRef.current);
+    setScore(s.score);
+  }, [updateHighScore]);
+
+  useGameLoop(tick, screen !== "playing");
+
+  // Touch helpers
+  const setTouch = (dir: "left" | "right" | "jump", val: boolean) => {
+    if (!stateRef.current) return;
+    if (dir === "left")  stateRef.current.touchLeft  = val;
+    if (dir === "right") stateRef.current.touchRight = val;
+    if (dir === "jump")  stateRef.current.touchJump  = val;
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const level = LEVELS[levelIdx] ?? LEVELS[0]!;
+
+  // ── Home screen ─────────────────────────────────────────────────────────────
+  if (screen === "home") {
+    return (
+      <GameShell topbar={<GameTopbar title="Climber Adventure" score={highScore} />}>
+        <div className="flex flex-col items-center justify-center h-full gap-6 px-4"
+          style={{ background: "linear-gradient(180deg, #0d1b2a 0%, #1a3a15 100%)" }}>
+          <h1 style={{ fontFamily: "Fraunces, serif", fontSize: "clamp(2rem,8vw,3.5rem)", color: "#fff", textShadow: "0 4px 24px #000c", textAlign: "center" }}>
+            ⛰️ Climber Adventure
+          </h1>
+          <p style={{ color: "#9ef", fontSize: "0.95rem", marginTop: -16 }}>Reach the summit!</p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", maxWidth: 300 }}>
+            <button onClick={() => setScreen("character")}
+              style={menuBtn("#27ae60")}>🎮 Play</button>
+            <button onClick={() => setScreen("levels")}
+              style={menuBtn("#2980b9")}>🗺️ Levels</button>
+            <button onClick={() => setScreen("character")}
+              style={menuBtn("#8e44ad")}>👤 Choose Character</button>
+          </div>
+
+          <p style={{ color: "#aaa", fontSize: "0.8rem" }}>🏆 Best: {highScore}m</p>
+          <p style={{ color: "#666", fontSize: "0.75rem", textAlign: "center" }}>
+            ← → / WASD to move · Space / ↑ to jump
+          </p>
+        </div>
+      </GameShell>
+    );
+  }
+
+  // ── Character select ─────────────────────────────────────────────────────────
+  if (screen === "character") {
+    return (
+      <GameShell topbar={<GameTopbar title="Choose Character" score={0} />}>
+        <div className="flex flex-col items-center justify-center h-full gap-6 px-4"
+          style={{ background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)" }}>
+          <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "clamp(1.5rem,6vw,2.2rem)", color: "#fff" }}>
+            Who are you?
+          </h2>
+
+          <div style={{ display: "flex", gap: 24, justifyContent: "center", flexWrap: "wrap" }}>
+            {/* Boy */}
+            <button onClick={() => setGender("boy")} style={charCard(gender === "boy", "#2980b9", "#5dade2")}>
+              <canvas width={66} height={90}
+                style={{ imageRendering: "pixelated", display: "block", margin: "0 auto 10px" }}
+                ref={el => {
+                  if (!el) return;
+                  const c = el.getContext("2d");
+                  if (!c) return;
+                  c.clearRect(0, 0, 66, 90);
+                  drawPixelChar(c, 10, 5, true, "boy", 0, false, false);
+                }} />
+              <p style={{ color: "#fff", fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Boy 🧒</p>
+              {gender === "boy" && <p style={{ color: "#5dade2", fontSize: "0.8rem", margin: "4px 0 0" }}>✓ Selected</p>}
+            </button>
+
+            {/* Girl */}
+            <button onClick={() => setGender("girl")} style={charCard(gender === "girl", "#8e44ad", "#d980fa")}>
+              <canvas width={66} height={90}
+                style={{ imageRendering: "pixelated", display: "block", margin: "0 auto 10px" }}
+                ref={el => {
+                  if (!el) return;
+                  const c = el.getContext("2d");
+                  if (!c) return;
+                  c.clearRect(0, 0, 66, 90);
+                  drawPixelChar(c, 10, 5, true, "girl", 0, false, false);
+                }} />
+              <p style={{ color: "#fff", fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Girl 👧</p>
+              {gender === "girl" && <p style={{ color: "#d980fa", fontSize: "0.8rem", margin: "4px 0 0" }}>✓ Selected</p>}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+            <button onClick={() => setScreen("home")} style={menuBtn("#555")}>← Back</button>
+            <button onClick={() => setScreen("playing")} style={menuBtn("#27ae60")}>
+              Play as {gender === "boy" ? "Boy 🧒" : "Girl 👧"} →
+            </button>
+          </div>
+        </div>
+      </GameShell>
+    );
+  }
+
+  // ── Level select ─────────────────────────────────────────────────────────────
+  if (screen === "levels") {
+    return (
+      <GameShell topbar={<GameTopbar title="Select Level" score={0} />}>
+        <div className="flex flex-col items-center justify-center h-full gap-4 px-4"
+          style={{ background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)" }}>
+          <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "clamp(1.5rem,6vw,2.2rem)", color: "#fff" }}>
+            Choose a Level
+          </h2>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 340 }}>
+            {LEVELS.map((lv, i) => (
+              <button key={i} onClick={() => { setLevelIdx(i); setScreen("character"); }}
+                style={{
+                  background: levelIdx === i ? lv.bg2 : "#1a2a3a",
+                  border: `3px solid ${levelIdx === i ? "#fff" : "#2c3e50"}`,
+                  borderRadius: 16, padding: "14px 20px", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 16,
+                  boxShadow: levelIdx === i ? "0 0 20px #fff3" : "none",
+                  transition: "all 0.2s",
+                }}>
+                <span style={{ fontSize: "2rem" }}>{lv.emoji}</span>
+                <div style={{ textAlign: "left" }}>
+                  <p style={{ color: "#fff", fontWeight: 700, fontSize: "1rem", margin: 0 }}>{lv.name}</p>
+                  <p style={{ color: "#aaa", fontSize: "0.8rem", margin: 0 }}>{lv.desc}</p>
+                </div>
+                {levelIdx === i && <span style={{ marginLeft: "auto", color: "#fff" }}>✓</span>}
+              </button>
+            ))}
+          </div>
+
+          <button onClick={() => setScreen("home")} style={{ ...menuBtn("#555"), marginTop: 8 }}>← Back</button>
+        </div>
+      </GameShell>
+    );
+  }
+
+  // ── Game Over ────────────────────────────────────────────────────────────────
+  if (screen === "dead") {
+    return (
+      <GameShell topbar={<GameTopbar title="Game Over" score={score} />}>
+        <div className="flex flex-col items-center justify-center h-full gap-5 px-4"
+          style={{ background: "linear-gradient(180deg, #2c0a0a 0%, #1a0505 100%)" }}>
+          <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "clamp(2rem,8vw,3rem)", color: "#ff4444" }}>
+            💀 Game Over
+          </h2>
+          <div style={{ background: "#ffffff18", borderRadius: 20, padding: "24px 40px", textAlign: "center" }}>
+            <p style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: 700, margin: "0 0 8px" }}>🏔️ {score}m climbed</p>
+            <p style={{ color: "#ffd700", fontSize: "1.1rem", margin: "0 0 8px" }}>🪙 {coinsUI} coins</p>
+            <p style={{ color: "#aaa", fontSize: "0.9rem", margin: 0 }}>🏆 Best: {highScore}m</p>
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            <button onClick={() => setScreen("playing")} style={menuBtn("#27ae60")}>🔄 Play Again</button>
+            <button onClick={() => setScreen("home")}    style={menuBtn("#2980b9")}>🏠 Home</button>
+          </div>
+        </div>
+      </GameShell>
+    );
+  }
+
+  // ── Playing ──────────────────────────────────────────────────────────────────
   return (
-    <GameShell topbar={
-      <GameTopbar
-        title="Climber Adventure"
-        score={score}
-        highScore={highScore}
-      />
-    }>
+    <GameShell topbar={<GameTopbar title={`${level.emoji} ${level.name}`} score={score} />}>
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <canvas ref={canvasRef}
+          style={{ display: "block", width: "100%", height: "100%", imageRendering: "pixelated" }} />
 
-        {/* ── HOME ── */}
-        {screen === "home" && (
-          <HomeScreen
-            onPlay={startGame}
-            onCharacter={() => setScreen("character")}
-            onLevels={() => setScreen("levels")}
-          />
-        )}
-
-        {/* ── CHARACTER SELECT ── */}
-        {screen === "character" && (
-          <CharacterScreen
-            gender={gender}
-            onSelect={(g) => { setGender(g); }}
-            onBack={() => setScreen("home")}
-          />
-        )}
-
-        {/* ── LEVEL SELECT ── */}
-        {screen === "levels" && (
-          <LevelScreen
-            level={level}
-            onSelect={(l) => { setLevel(l); }}
-            onBack={() => setScreen("home")}
-          />
-        )}
-
-        {/* ── GAME CANVAS ── */}
-        <canvas
-          ref={canvasRef}
-          style={{
-            display: screen === "playing" ? "block" : "none",
-            width: "100%", height: "100%",
-            imageRendering: "pixelated",
-          }}
-        />
-
-        {/* ── TOUCH CONTROLS (playing) ── */}
-        {screen === "playing" && (
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
-            display: "flex", justifyContent: "space-between", padding: "12px 16px",
-            pointerEvents: "none" }}>
-            <div style={{ display: "flex", gap: 10, pointerEvents: "all" }}>
-              <button
-                onPointerDown={() => handleTouchLeft(true)}
-                onPointerUp={() => handleTouchLeft(false)}
-                onPointerLeave={() => handleTouchLeft(false)}
-                style={{ width: 60, height: 60, borderRadius: 12, fontSize: 24,
-                  background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.3)",
-                  color: "#fff", cursor: "pointer", userSelect: "none" }}>◀</button>
-              <button
-                onPointerDown={() => handleTouchRight(true)}
-                onPointerUp={() => handleTouchRight(false)}
-                onPointerLeave={() => handleTouchRight(false)}
-                style={{ width: 60, height: 60, borderRadius: 12, fontSize: 24,
-                  background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.3)",
-                  color: "#fff", cursor: "pointer", userSelect: "none" }}>▶</button>
+        {/* HUD */}
+        <div style={{ position: "absolute", top: 10, left: 10, pointerEvents: "none", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ background: "#0009", borderRadius: 10, padding: "6px 12px", color: "#fff", fontSize: "1rem" }}>
+            {Array.from({ length: Math.max(0, livesUI) }).map((_, i) => <span key={i}>❤️</span>)}
+            {livesUI <= 0 && <span>💀</span>}
+          </div>
+          <div style={{ background: "#0009", borderRadius: 10, padding: "6px 12px", color: "#ffd700", fontWeight: 700, fontSize: "0.95rem" }}>
+            🪙 {coinsUI}
+          </div>
+          {fizzyUI && (
+            <div style={{ background: "#ffe06699", borderRadius: 10, padding: "6px 12px", color: "#333", fontWeight: 700, fontSize: "0.85rem" }}>
+              🥤 BOOST!
             </div>
-            <button
-              onPointerDown={() => handleTouchJump(true)}
-              onPointerUp={() => handleTouchJump(false)}
-              onPointerLeave={() => handleTouchJump(false)}
-              style={{ width: 70, height: 70, borderRadius: "50%", fontSize: 28,
-                background: "rgba(100,200,255,0.25)", border: "2px solid rgba(100,200,255,0.5)",
-                color: "#fff", cursor: "pointer", userSelect: "none", pointerEvents: "all" }}>↑</button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* ── DEAD SCREEN ── */}
-        {screen === "dead" && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            background: "rgba(0,0,0,0.82)", gap: 14 }}>
-            <h2 style={{ fontFamily: "Fraunces, serif", color: "#ff4444", fontSize: 30,
-              fontWeight: 900, textShadow: "0 2px 12px #f00a" }}>💀 Game Over</h2>
-            <p style={{ color: "#fff", fontFamily: "Manrope, sans-serif", fontSize: 18 }}>
-              Score: <strong>{score}</strong>
-            </p>
-            <p style={{ color: "#ffcc00", fontFamily: "Manrope, sans-serif", fontSize: 15 }}>
-              🪙 Coins: {coins}
-            </p>
-            <p style={{ color: "#aac", fontFamily: "Manrope, sans-serif", fontSize: 14 }}>
-              Best: {highScore}
-            </p>
-            <button onClick={startGame}
-              style={{ background: "#22cc55", color: "#fff", border: "none", borderRadius: 12,
-                padding: "13px 40px", fontSize: 18, fontWeight: 800, cursor: "pointer",
-                fontFamily: "Manrope, sans-serif", boxShadow: "0 4px 0 #118833",
-                minHeight: 50, marginTop: 6 }}>
-              ▶ Play Again
-            </button>
-            <button onClick={() => setScreen("home")}
-              style={{ background: "#334466", color: "#aac", border: "none", borderRadius: 10,
-                padding: "10px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer",
-                fontFamily: "Manrope, sans-serif", minHeight: 44 }}>
-              🏠 Home
-            </button>
+        {/* Touch controls */}
+        <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "space-between", padding: "0 16px" }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button style={touchBtnStyle}
+              onPointerDown={() => setTouch("left", true)}
+              onPointerUp={() => setTouch("left", false)}
+              onPointerLeave={() => setTouch("left", false)}>◀</button>
+            <button style={touchBtnStyle}
+              onPointerDown={() => setTouch("right", true)}
+              onPointerUp={() => setTouch("right", false)}
+              onPointerLeave={() => setTouch("right", false)}>▶</button>
           </div>
-        )}
+          <button style={{ ...touchBtnStyle, width: 72, height: 72, background: "#27ae6088", fontSize: "1.8rem" }}
+            onPointerDown={() => setTouch("jump", true)}
+            onPointerUp={() => setTouch("jump", false)}
+            onPointerLeave={() => setTouch("jump", false)}>↑</button>
+        </div>
+
+        {/* Pause */}
+        <button onClick={() => setScreen("home")}
+          style={{ position: "absolute", top: 10, right: 10, background: "#0009", border: "none", borderRadius: 10, color: "#fff", fontSize: "1.1rem", padding: "8px 14px", cursor: "pointer" }}>
+          ⏸
+        </button>
       </div>
     </GameShell>
   );
+}
+
+// ── Style helpers ─────────────────────────────────────────────────────────────
+function menuBtn(bg: string): React.CSSProperties {
+  return {
+    background: bg, color: "#fff", border: "none",
+    borderRadius: 14, padding: "14px 28px",
+    fontSize: "1.05rem", fontWeight: 700, cursor: "pointer",
+    boxShadow: "0 4px 14px #0005", width: "100%",
+  };
+}
+
+function charCard(selected: boolean, bg: string, glow: string): React.CSSProperties {
+  return {
+    background: selected ? bg : "#1a2a3a",
+    border: `4px solid ${selected ? glow : "#2c3e50"}`,
+    borderRadius: 20, padding: "22px 28px", cursor: "pointer",
+    boxShadow: selected ? `0 0 28px ${glow}88` : "none",
+    transition: "all 0.2s", minWidth: 130,
+  };
 }

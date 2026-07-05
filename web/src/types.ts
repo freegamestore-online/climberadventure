@@ -21,7 +21,7 @@ export interface Coin {
   x: number;
   y: number;
   collected: boolean;
-  bobOffset: number;
+  anim: number;
 }
 
 export interface Pickup {
@@ -29,7 +29,7 @@ export interface Pickup {
   y: number;
   kind: "fizzy" | "medicine";
   collected: boolean;
-  bobOffset: number;
+  anim: number;
 }
 
 export interface Snowflake {
@@ -37,7 +37,6 @@ export interface Snowflake {
   y: number;
   speed: number;
   size: number;
-  opacity: number;
 }
 
 export interface Particle {
@@ -61,12 +60,11 @@ export interface GameState {
   pvx: number;
   pvy: number;
   onGround: boolean;
-  facingRight: boolean;
+  facing: boolean;
   jumpCount: number;
   lives: number;
   invincibleTimer: number;
-  // Power-ups
-  fizzyTimer: number;   // jump boost active
+  fizzyTimer: number;
   // Camera
   cameraY: number;
   // World
@@ -78,14 +76,15 @@ export interface GameState {
   snowflakes: Snowflake[];
   // Score
   score: number;
-  coins_collected: number;
+  coinsCollected: number;
+  altitude: number;
   maxAltitude: number;
   rockSpawnTimer: number;
   rockSpawnInterval: number;
-  altitude: number;
   // Animation
-  playerLegPhase: number;
+  legPhase: number;
   deathTimer: number;
+  prevJump: boolean;
   // Touch
   touchLeft: boolean;
   touchRight: boolean;
