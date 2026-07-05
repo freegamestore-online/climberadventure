@@ -3,7 +3,7 @@ export interface Platform {
   y: number;
   width: number;
   type: "normal" | "ice" | "crumble" | "bounce";
-  crumbleTimer: number; // countdown after player lands
+  crumbleTimer: number;
   crumbled: boolean;
 }
 
@@ -17,20 +17,27 @@ export interface Rock {
   rotSpeed: number;
 }
 
+export interface Coin {
+  x: number;
+  y: number;
+  collected: boolean;
+  bobOffset: number;
+}
+
+export interface Pickup {
+  x: number;
+  y: number;
+  kind: "fizzy" | "medicine";
+  collected: boolean;
+  bobOffset: number;
+}
+
 export interface Snowflake {
   x: number;
   y: number;
   speed: number;
   size: number;
   opacity: number;
-}
-
-export interface Cloud {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  speed: number;
 }
 
 export interface Particle {
@@ -44,10 +51,10 @@ export interface Particle {
   size: number;
 }
 
-export type GamePhase = "menu" | "playing" | "dead";
+export type Gender = "boy" | "girl";
+export type Screen = "home" | "character" | "levels" | "playing" | "dead";
 
 export interface GameState {
-  phase: GamePhase;
   // Player
   px: number;
   py: number;
@@ -56,26 +63,30 @@ export interface GameState {
   onGround: boolean;
   facingRight: boolean;
   jumpCount: number;
+  lives: number;
+  invincibleTimer: number;
+  // Power-ups
+  fizzyTimer: number;   // jump boost active
   // Camera
   cameraY: number;
   // World
   platforms: Platform[];
   rocks: Rock[];
+  coins: Coin[];
+  pickups: Pickup[];
   particles: Particle[];
   snowflakes: Snowflake[];
-  clouds: Cloud[];
-  // Score / altitude
+  // Score
   score: number;
+  coins_collected: number;
   maxAltitude: number;
   rockSpawnTimer: number;
   rockSpawnInterval: number;
-  // Difficulty
-  altitude: number; // increases as player climbs
+  altitude: number;
   // Animation
-  playerAnim: number;
   playerLegPhase: number;
   deathTimer: number;
-  // Touch controls
+  // Touch
   touchLeft: boolean;
   touchRight: boolean;
   touchJump: boolean;
