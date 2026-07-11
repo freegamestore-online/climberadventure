@@ -54,7 +54,6 @@ export type Gender = "boy" | "girl";
 export type Screen = "home" | "character" | "levels" | "playing" | "dead";
 
 export interface GameState {
-  // Player
   px: number;
   py: number;
   pvx: number;
@@ -65,28 +64,27 @@ export interface GameState {
   lives: number;
   invincibleTimer: number;
   fizzyTimer: number;
-  // Camera
   cameraY: number;
-  // World
   platforms: Platform[];
   rocks: Rock[];
   coins: Coin[];
   pickups: Pickup[];
   particles: Particle[];
   snowflakes: Snowflake[];
-  // Score
   score: number;
   coinsCollected: number;
   altitude: number;
   maxAltitude: number;
   rockSpawnTimer: number;
   rockSpawnInterval: number;
-  // Animation
   legPhase: number;
   deathTimer: number;
   prevJump: boolean;
-  // Touch
   touchLeft: boolean;
   touchRight: boolean;
   touchJump: boolean;
+  bonusZone: boolean;
+  bonusZoneTimer: number;
+  lastBonusAlt: number;
+  rainbowT: number;
 }

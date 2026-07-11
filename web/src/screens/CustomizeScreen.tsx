@@ -1,0 +1,40 @@
+import React, { useState } from "react";
+import { useLocalStorage } from "../hooks/useLocalStorage";
+import { Hat } from "../lib/drawChar";
+
+const hats: Hat[] = ["none", "star", "cap", "bow"];
+
+export function CustomizeScreen({ onClose }: { onClose: () => void }) {
+  const [hat, setHat] = useLocalStorage<Hat>("climberadventure_hat", "none");
+  const [selectedHat, setSelectedHat] = useState<Hat>(hat);
+
+  const handleSave = () => {
+    setHat(selectedHat);
+    onClose();
+  };
+
+  return (
+    <div className="p-4 flex flex-col items-center">
+      <h2 className="text-xl font-bold mb-4">Customize Your Character</h2>
+      <div className="flex gap-4 mb-4">
+        {hats.map((h) => (
+          <button
+            key={h}
+            className={`p-2 border rounded-md ${
+              h === selectedHat ? "border-blue-500" : "border-gray-300"
+            }`}
+            onClick={() => setSelectedHat(h)}
+          >
+            {h === "none" ? "No Hat" : h.charAt(0).toUpperCase() + h.slice(1)}
+          </button>
+        ))}
+      </div>
+      <button
+        className="bg-blue-500 text-white py-2 px-4 rounded"
+        onClick={handleSave}
+      >
+        Save
+      </button>
+    </div>
+  );
+}
