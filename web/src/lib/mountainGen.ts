@@ -13,3 +13,15 @@ export function generateRocks(level: number, dt: number, state: GameState) {
     state.rocks.push({ x: rockX, y: state.cameraY - state.ch, vy: rockSpeed });
   }
 }
+
+export function generateInitialPlatforms(cw: number, ch: number) {
+  const platforms = [];
+  for (let i = 0; i < 10; i++) {
+    platforms.push({
+      x: randomInRange(0, cw),
+      y: ch - i * 100,
+      type: "normal",
+    });
+  }
+  return platforms;
+}
