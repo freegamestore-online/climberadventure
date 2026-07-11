@@ -1,15 +1,15 @@
 import React, { useState } from "react";
-import { useLocalStorage } from "../hooks/useLocalStorage";
 import { Hat } from "../lib/drawChar";
 
 const hats: Hat[] = ["none", "star", "cap", "bow"];
 
 export function CustomizeScreen({ onClose }: { onClose: () => void }) {
-  const [hat, setHat] = useLocalStorage<Hat>("climberadventure_hat", "none");
-  const [selectedHat, setSelectedHat] = useState<Hat>(hat);
+  const [selectedHat, setSelectedHat] = useState<Hat>(
+    (localStorage.getItem("climber_accessory") as Hat) || "none"
+  );
 
   const handleSave = () => {
-    setHat(selectedHat);
+    localStorage.setItem("climber_accessory", selectedHat);
     onClose();
   };
 
