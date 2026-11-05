@@ -1,20 +1,19 @@
-import { GameState } from "../types";
-import { randomColor } from "./canvas";
+import type { GameState } from "../types";
 
-export function handleRainbowBonus(s: GameState) {
-  const RAINBOW_INTERVAL = 2000;
-  const BONUS_DURATION = 10; // 10 seconds
+const RAINBOW_INTERVAL = 2000; // metres (HUD shows altitude / 10)
+const BONUS_DURATION = 10; // seconds
 
-  if (s.altitude - s.lastBonusAlt >= RAINBOW_INTERVAL) {
+export function handleRainbowBonus(s: GameState, dt: number) {
+  const metres = Math.floor(s.altitude / 10);
+  if (metres - s.lastBonusAlt >= RAINBOW_INTERVAL) {
     s.bonusZone = true;
     s.bonusZoneTimer = BONUS_DURATION;
-    s.lastBonusAlt = s.altitude;
+    s.lastBonusAlt = metres - (metres % RAINBOW_INTERVAL);
   }
 
   if (s.bonusZone) {
-    s.bonusZoneTimer -= 1 / 60;
-    if (s.bonusZoneTimer <= 0) {
-      s.bonusZone = false;
-    }
+    s.rainbowT += dt;
+    s.bonusZoneTimer -= dt;
+    if (s.bonusZoneTimer <= 0) s.bonusZone = false;
   }
 }

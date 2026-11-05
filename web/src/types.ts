@@ -51,7 +51,7 @@ export interface Particle {
 }
 
 export type Gender = "boy" | "girl";
-export type Screen = "home" | "character" | "levels" | "playing" | "dead";
+export type Screen = "home" | "character" | "customize" | "levels" | "playing" | "dead";
 
 export interface GameState {
   px: number;
