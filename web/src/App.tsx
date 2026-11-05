@@ -305,6 +305,7 @@ export default function App() {
   const [coinsUI, setCoinsUI]     = useState(0);
   const [livesUI, setLivesUI]     = useState(3);
   const [fizzyUI, setFizzyUI]     = useState(false);
+  const [paused, setPaused]       = useState(false);
   const [hat, setHat]             = useState<Hat>(() => (localStorage.getItem("climber_accessory") as Hat | null) ?? "none");
   const [highScore, updateHighScore] = useHighScore("climberadventure_hs");
 
@@ -314,6 +315,7 @@ export default function App() {
   const hatRef     = useRef<Hat>(hat);
   const levelRef   = useRef(0);
   const screenRef  = useRef<Screen>("home");
+  const keysRef    = useRef(new Set<string>());
 
   useEffect(() => { genderRef.current = gender; }, [gender]);
   useEffect(() => { hatRef.current = hat; }, [hat]);
@@ -347,23 +349,32 @@ export default function App() {
 
   // Init when entering playing screen
   useEffect(() => {
-    if (screen === "playing") initGame();
+    if (screen === "playing") {
+      setPaused(false);
+      initGame();
+    }
   }, [screen, initGame]);
 
   // Key listener
   useEffect(() => {
-    const keys = new Set<string>();
-    (window as unknown as { _gameKeys: Set<string> })._gameKeys = keys;
+    const keys = keysRef.current;
     const down = (e: KeyboardEvent) => {
       keys.add(e.key);
-      if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
+      // Only swallow game keys mid-run, so Space still presses menu buttons.
+      if (screenRef.current === "playing" && [" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+      }
     };
     const up = (e: KeyboardEvent) => keys.delete(e.key);
+    // keyup never arrives if focus leaves the window mid-press.
+    const blur = () => keys.clear();
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
     };
   }, []);
 
@@ -378,7 +389,7 @@ export default function App() {
     const ch = canvas.height;
 
     // Input
-    const keys: Set<string> = (window as unknown as { _gameKeys: Set<string> })._gameKeys ?? new Set();
+    const keys = keysRef.current;
     const goLeft  = keys.has("ArrowLeft")  || keys.has("a") || keys.has("A") || s.touchLeft;
     const goRight = keys.has("ArrowRight") || keys.has("d") || keys.has("D") || s.touchRight;
     const jumpNow = keys.has("ArrowUp") || keys.has("w") || keys.has("W") || keys.has(" ") || s.touchJump;
@@ -621,7 +632,7 @@ export default function App() {
     setScore(s.score);
   }, [updateHighScore]);
 
-  useGameLoop(tick, screen !== "playing");
+  useGameLoop(tick, screen !== "playing" || paused);
 
   // Touch helpers
   const setTouch = (dir: "left" | "right" | "jump", val: boolean) => {
@@ -630,6 +641,17 @@ export default function App() {
     if (dir === "right") stateRef.current.touchRight = val;
     if (dir === "jump")  stateRef.current.touchJump  = val;
   };
+
+  // Capture the pointer so a finger drifting off a button keeps it held.
+  const holdHandlers = (dir: "left" | "right" | "jump") => ({
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setTouch(dir, true);
+    },
+    onPointerUp: () => setTouch(dir, false),
+    onPointerCancel: () => setTouch(dir, false),
+    onLostPointerCapture: () => setTouch(dir, false),
+  });
 
   const level = LEVELS[levelIdx] ?? LEVELS[0]!;
 
@@ -655,7 +677,7 @@ export default function App() {
               style={menuBtn("#d35400")}>🎩 Customize</button>
           </div>
 
-          <p style={{ color: "#aaa", fontSize: "0.8rem" }}>🏆 Best: {highScore}m</p>
+          <p style={{ color: "#aaa", fontSize: "0.8rem" }}>🏆 Best: {highScore}</p>
           <p style={{ color: "#666", fontSize: "0.75rem", textAlign: "center" }}>
             ← → / WASD to move · Space / ↑ to jump
           </p>
@@ -777,9 +799,9 @@ export default function App() {
             💀 Game Over
           </h2>
           <div style={{ background: "#ffffff18", borderRadius: 20, padding: "24px 40px", textAlign: "center" }}>
-            <p style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: 700, margin: "0 0 8px" }}>🏔️ {score}m climbed</p>
+            <p style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: 700, margin: "0 0 8px" }}>🏔️ {score} points</p>
             <p style={{ color: "#ffd700", fontSize: "1.1rem", margin: "0 0 8px" }}>🪙 {coinsUI} coins</p>
-            <p style={{ color: "#aaa", fontSize: "0.9rem", margin: 0 }}>🏆 Best: {highScore}m</p>
+            <p style={{ color: "#aaa", fontSize: "0.9rem", margin: 0 }}>🏆 Best: {highScore}</p>
           </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
             <button onClick={() => setScreen("playing")} style={menuBtn("#27ae60")}>🔄 Play Again</button>
@@ -792,7 +814,16 @@ export default function App() {
 
   // ── Playing ──────────────────────────────────────────────────────────────────
   return (
-    <GameShell topbar={<GameTopbar title={`${level.emoji} ${level.name}`} score={score} />}>
+    <GameShell
+      topbar={
+        <GameTopbar
+          title={`${level.emoji} ${level.name}`}
+          score={score}
+          onPlayPause={() => setPaused((p) => !p)}
+          paused={paused}
+        />
+      }
+    >
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
         <canvas ref={canvasRef}
           style={{ display: "block", width: "100%", height: "100%", imageRendering: "pixelated" }} />
@@ -816,25 +847,23 @@ export default function App() {
         {/* Touch controls */}
         <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", justifyContent: "space-between", padding: "0 16px" }}>
           <div style={{ display: "flex", gap: 10 }}>
-            <button style={touchBtnStyle}
-              onPointerDown={() => setTouch("left", true)}
-              onPointerUp={() => setTouch("left", false)}
-              onPointerLeave={() => setTouch("left", false)}>◀</button>
-            <button style={touchBtnStyle}
-              onPointerDown={() => setTouch("right", true)}
-              onPointerUp={() => setTouch("right", false)}
-              onPointerLeave={() => setTouch("right", false)}>▶</button>
+            <button style={touchBtnStyle} aria-label="left" {...holdHandlers("left")}>◀</button>
+            <button style={touchBtnStyle} aria-label="right" {...holdHandlers("right")}>▶</button>
           </div>
           <button style={{ ...touchBtnStyle, width: 72, height: 72, background: "#27ae6088", fontSize: "1.8rem" }}
-            onPointerDown={() => setTouch("jump", true)}
-            onPointerUp={() => setTouch("jump", false)}
-            onPointerLeave={() => setTouch("jump", false)}>↑</button>
+            aria-label="jump" {...holdHandlers("jump")}>↑</button>
         </div>
 
-        {/* Pause */}
-        <button onClick={() => setScreen("home")}
+        {paused && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0008" }}>
+            <button onClick={() => setPaused(false)} style={{ ...menuBtn("#27ae60"), width: "auto" }}>▶ Resume</button>
+          </div>
+        )}
+
+        {/* Quit to home (pause lives in the topbar) */}
+        <button onClick={() => setScreen("home")} aria-label="Quit to home"
           style={{ position: "absolute", top: 10, right: 10, background: "#0009", border: "none", borderRadius: 10, color: "#fff", fontSize: "1.1rem", padding: "8px 14px", cursor: "pointer" }}>
-          ⏸
+          🏠
         </button>
       </div>
     </GameShell>
