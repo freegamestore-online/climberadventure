@@ -13,6 +13,7 @@ import { drawPixelChar, type Hat } from "./lib/drawChar";
 import { handleRainbowBonus } from "./lib/game";
 import type { GameState, Gender, Screen } from "./types";
 import { CustomizeScreen } from "./screens/CustomizeScreen";
+import { CharPreview } from "./screens/CharPreview";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GRAVITY = 1400;
@@ -699,30 +700,14 @@ export default function App() {
           <div style={{ display: "flex", gap: 24, justifyContent: "center", flexWrap: "wrap" }}>
             {/* Boy */}
             <button onClick={() => setGender("boy")} style={charCard(gender === "boy", "#2980b9", "#5dade2")}>
-              <canvas width={66} height={90}
-                style={{ imageRendering: "pixelated", display: "block", margin: "0 auto 10px" }}
-                ref={el => {
-                  if (!el) return;
-                  const c = el.getContext("2d");
-                  if (!c) return;
-                  c.clearRect(0, 0, 66, 90);
-                  drawPixelChar(c, 22, 30, true, "boy", hat, 0, false, false);
-                }} />
+              <CharPreview gender="boy" hat={hat} style={{ display: "block", margin: "0 auto 10px" }} />
               <p style={{ color: "#fff", fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Boy 🧒</p>
               {gender === "boy" && <p style={{ color: "#5dade2", fontSize: "0.8rem", margin: "4px 0 0" }}>✓ Selected</p>}
             </button>
 
             {/* Girl */}
             <button onClick={() => setGender("girl")} style={charCard(gender === "girl", "#8e44ad", "#d980fa")}>
-              <canvas width={66} height={90}
-                style={{ imageRendering: "pixelated", display: "block", margin: "0 auto 10px" }}
-                ref={el => {
-                  if (!el) return;
-                  const c = el.getContext("2d");
-                  if (!c) return;
-                  c.clearRect(0, 0, 66, 90);
-                  drawPixelChar(c, 22, 30, true, "girl", hat, 0, false, false);
-                }} />
+              <CharPreview gender="girl" hat={hat} style={{ display: "block", margin: "0 auto 10px" }} />
               <p style={{ color: "#fff", fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>Girl 👧</p>
               {gender === "girl" && <p style={{ color: "#d980fa", fontSize: "0.8rem", margin: "4px 0 0" }}>✓ Selected</p>}
             </button>

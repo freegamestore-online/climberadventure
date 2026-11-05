@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { drawPixelChar, type Hat } from "../lib/drawChar";
+import type { Hat } from "../lib/drawChar";
+import { CharPreview } from "./CharPreview";
 import type { Gender } from "../types";
 
 const hats: Hat[] = ["none", "star", "cap", "bow"];
@@ -13,14 +14,7 @@ export function CustomizeScreen({ gender, hat, onSave }: { gender: Gender; hat: 
       <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "clamp(1.5rem,6vw,2.2rem)" }}>
         Customize Your Character
       </h2>
-      <canvas width={66} height={90}
-        style={{ imageRendering: "pixelated", width: 99, height: 135 }}
-        ref={el => {
-          const c = el?.getContext("2d");
-          if (!c) return;
-          c.clearRect(0, 0, 66, 90);
-          drawPixelChar(c, 22, 30, true, gender, selectedHat, 0, false, false);
-        }} />
+      <CharPreview gender={gender} hat={selectedHat} style={{ width: 99, height: 135 }} />
       <div className="flex gap-3 flex-wrap justify-center">
         {hats.map((h) => (
           <button
